@@ -17,15 +17,16 @@
       
 ## 各文件夹描述
 ----
-- dataProcess.py  
-      用于处理数据集的函数
-      包括：归一化，one-hot化，抽取特征边界
+
+    dataProcess.py  
+       用于处理数据集的函数
+       包括：归一化，one-hot化，抽取特征边界
       
-- loadDatas.py
+    loadDatas.py
       用于加载数据
       包含加载糖尿病数据集和Titanic数据的函数
       
-- optim.py
+    optim.py
       各种优化函数
       包括：各种loss函数
            各种激活函数
@@ -33,11 +34,11 @@
            normalization
            dropout
  
-- Model.py
-     包含各种模型
-     有:决策树模型
-        线性模型
+    Model.py
+      包含各种模型
+      有:决策树模型
+         线性模型
    
- - ModelTest.ipynb
-     对模型的测试
+    ModelTest.ipynb
+       对模型的测试
 
