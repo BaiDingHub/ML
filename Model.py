@@ -450,3 +450,67 @@ class RandomForest(object):
         acc = np.sum(out == Y)/Y.shape[0]
         return out,acc
 
+
+# In[3]:
+
+
+class KNN(object):
+    '''
+    KNN分类器
+    '''
+    def __init__(self,X_train,Y_train,K,way = 'E'):
+        '''
+        self.X_train:用于匹配的训练数据
+        self.Y_train:训练标签
+        self.K:KNN的K值
+        self.way: 'E' : 欧式距离，　'M': 曼哈顿距离，默认'E'
+        '''
+        self.X_train = X_train
+        self.Y_train = Y_train
+        self.K = K
+        self.way = way
+        
+    def predict(self,X,Y = None):
+        '''
+        预测函数
+        Inputs:
+        -X:测试数据
+        -Y:测试标签，默认None (预测)
+        '''
+        predict = []
+        for x_test in X:
+            d = self.getDist(x_test,X,self.way)
+            index = np.argsort(d)[:self.K]
+            K_values = self.Y_train[index]
+            k = max(K_values,key = collections.Counter(K_values).get)
+            predict.append(k)
+        predict = np.array(predict).reshape(len(predict),)
+        if Y is None:
+            return predict
+        acc = np.sum(predict == Y)/Y.shape[0]
+        return predict,acc
+    
+    def getDist(self,x_test,X,way):
+        '''
+        距离函数,计算x_test与X的距离
+        Inputs:
+        -x_test:(D,)
+        -X:(N,D)
+        -way: 'E' : 欧式距离，　'M': 曼哈顿距离
+        
+        Outputs:
+        -d:(N,) x_test与X的距离
+        '''
+        d = X - x_test
+        if way == 'E':
+            d = np.sum(d**2,axis = 1)
+        elif way == 'M':
+            d = np.sum(abs(d),axis = 1)
+        return d
+
+
+# In[ ]:
+
+
+
+
