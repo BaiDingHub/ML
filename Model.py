@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 import numpy as np
 from loadDatas import *
 import collections
 from optim import * 
+import random
 
 
 # In[ ]:
@@ -60,7 +61,7 @@ class DecisionTree(object):
         self.numBorder = numBorder
         self.EBorder = EBorder
     
-    def bulidTree(self,x,y,atts,parentNode = None):
+    def buildTree(self,x,y,atts,parentNode = None,chooseIndex = None):
         '''
         模型训练,
         Inputs:
@@ -68,6 +69,7 @@ class DecisionTree(object):
         -y:训练标签
         -atts:每一个属性上的分类
         -parentNode:父节点
+        -chooseIndex:这个树可以操作的属性标签
         
         Outputs:
         -treeNode:一个节点
@@ -85,10 +87,10 @@ class DecisionTree(object):
                 treeNode.index = max(collections.Counter(y),key = collections.Counter(y).get)
                 return treeNode
         #如果该节点无训练数据，返回
-        if(y.all() == None):
+        if(y is None):
             return None
         #将第一个节点与模型的self.tree链接
-        if parentNode == None:
+        if parentNode is None:
             parentNode = self.tree
             self.tree.leftNode = treeNode
             self.tree.rightNode = treeNode
@@ -100,7 +102,7 @@ class DecisionTree(object):
             treeNode.index = max(collections.Counter(y),key = collections.Counter(y).get)
             return treeNode
         #得到当前节点最好的分割属性和分割值
-        bestName,bestValue,bestEva = self.chooseBestNode(x,y,atts)
+        bestName,bestValue,bestEva = self.chooseBestNode(x,y,atts,chooseIndex)
         #预剪枝
         if(self.preCut):
             #如果评价值小于评价值边界
@@ -116,33 +118,39 @@ class DecisionTree(object):
         treeNode.parentNode = parentNode
         treeNode.index = max(collections.Counter(y),key = collections.Counter(y).get)
         #如果分割节点失败，将该节点设置为叶节点
-        if(bestValue == None):
+        if(bestValue is None):
             treeNode.feat = 'LeafNode'
             return treeNode
         #分割数据
         X_left,Y_left,X_right,Y_right = self.spiltDatas(x,y,bestName,bestValue)
         #添加该节点的左右节点
-        treeNode.leftNode = self.bulidTree(X_left,Y_left,atts,treeNode)
-        treeNode.rightNode = self.bulidTree(X_right,Y_right,atts,treeNode)
+        treeNode.leftNode = self.buildTree(X_left,Y_left,atts,treeNode,chooseIndex)
+        treeNode.rightNode = self.buildTree(X_right,Y_right,atts,treeNode,chooseIndex)
         return treeNode
     
-    def chooseBestNode(self,x,y,atts):
+    def chooseBestNode(self,x,y,atts,chooseIndex):
         '''
         选择当前属性的最好节点
         Inputs:
         -x:当前节点的训练数据
         -y:当前节点的训练标签
         -atts:当前节点可供选择的所有属性 list
+        -chooseIndex:这个树可以操作的属性标签
         
         Outputs:
         -bestName:最好的节点列数
         -bestValue:最好的划分值
         -bestEva:得到的最好的评价
         '''
+        
+        if chooseIndex is None:
+            l = len(atts)
+            chooseIndex = list(range(l))
         bestName = None
         bestValue = None
         bestEva = -np.inf
-        for col,att in enumerate(atts):
+        for col in chooseIndex:
+            att = atts[col]
             for value in att:
                 E = self.computeEva(x,y,col,value)
                 if E> bestEva:
@@ -211,14 +219,15 @@ class DecisionTree(object):
     def predict(self,X,Y = None):
         pre = []
         for i,x in enumerate(X):
-            if Y.all()!= None:
+            if Y is not None:
                 y = Y[i]
             t = self.tree.leftNode
             while(t.feat != 'LeafNode'):
-                t.values.append(y)
+                if Y is not None:
+                    t.values.append(y)
                 name = t.name
                 value = t.spiltValue
-                if(value == None):
+                if(value is None):
                     t = t.parentNode
                     break
                 if(x[name] <= value):
@@ -227,7 +236,7 @@ class DecisionTree(object):
                     t = t.rightNode
             pre.append(t.index)
         pre = np.array(pre).reshape((len(pre),))
-        if(y.all() == None):
+        if Y is  None:
             return pre
         score = np.sum(pre == Y)
         score /= Y.shape[0]
@@ -255,7 +264,7 @@ class DecisionTree(object):
             tree.feat = 'LeafNode'
 
 
-# In[4]:
+# In[ ]:
 
 
 class Linear(object):
@@ -270,9 +279,9 @@ class Linear(object):
         self.W = None
         self.b = None
     def train(self,X,y,out_dims,
-              lr = 1e-5,reg = 1e-2,
+              lr = 1e-5,reg = 1e-2,momentum = 0.9,decay_rate = 0.99,eps = 1e-8,
               batch_size = 32,epoch = 5,weight_scale = 1e-5,printFreq = 20,
-              grad_function = sgd,activation_function = 'relu'):
+              grad_function = sgd,activation_function = 'sigmoid'):
         '''
         Inputs:
         -X:训练数据 (N,D)
@@ -293,7 +302,8 @@ class Linear(object):
         self.b = np.zeros((H,))
         loss_history  = []
         acc_history = []
-        config = {'lr':lr}
+        self.config = {'lr':lr,'eps':eps,'momentum':momentum,'decay_rate':decay_rate}
+        self.reg =reg
         
         ## 设置激活函数
         if activation_function == 'relu':
@@ -321,15 +331,16 @@ class Linear(object):
             acc_history.append(acc)
             #得到loss
             loss,dout = self.loss(out,yy)
+            loss += 0.5 *self.reg* np.sqrt(np.sum(self.W ** 2))
             loss_history.append(loss)
             #激活函数反向传播
             dx = self.activation_backward(dout,cache)
             #得到梯度
-            dw = xx.T.dot(dx)
+            dw = xx.T.dot(dx) + self.reg * self.W
             db = dout.sum(axis = 0)
             #梯度下降
-            self.W = grad_function(self.W,dw,config)
-            self.b = grad_function(self.b,db,config)
+            self.W = grad_function(self.W,dw,self.config)
+            self.b = grad_function(self.b,db,self.config)
             
             if (i+1) % printFreq == 0:
                 print("epoch ",int(i/(iter_nums/epoch)),'|',epoch,'\t','acc = ',acc,'\tloss = ',loss)
@@ -345,7 +356,7 @@ class Linear(object):
         z = X.dot(self.W) + self.b
         out,_ = self.activation_forward(z)
         out = out.argmax(axis = 1)
-        if y.all() == None:
+        if y is None:
             return out,_
         acc = np.sum(out == y)/y.shape[0]
         return out,acc
@@ -367,4 +378,65 @@ class Logistic(Linear):
     def loss(self,out,y):
         loss,dx = softmax_loss(out,y)
         return loss,dx
+
+
+# In[ ]:
+
+
+class RandomForest(object):
+    '''
+    集成模型
+    随机森林
+    '''
+    def __init__(self,treeModel,T,trainFreq = 2/3,attFreq = 2/3):
+        '''
+        Inputs:
+        -self.model:随机森林的模型类
+        -self.T:随机森林的学习器的数目
+        -trainFreq:每次训练随机选择数据比例，默认2/3
+        -attFreq:每次训练随机选择的属性比例，默认2/3
+        '''
+        self.model = treeModel
+        self.T = T
+        self.trainFreq = trainFreq
+        self.attFreq = attFreq
+    
+    def train(self,X,Y,atts):
+        '''
+        Inputs:
+        -X:训练数据
+        -y:数据标签
+        -atts:数据属性对应的分类边界
+
+        '''
+        N,D = X.shape
+        Nnum = int(N * self.trainFreq)  #一个模型的训练个数
+        Dnum = int(D * self.attFreq)    #一个模型的训练属性个数
+        NList =list(range(N))
+        DList = list(range(D))
+        out = None
+        for i in range(self.T):
+            random_Nindex = random.sample(NList,Nnum)
+            random_Dindex = random.sample(DList,Dnum)
+            random_Nindex.sort()
+            random_Dindex.sort()
+            X_train = X[random_Nindex]
+            Y_train = Y[random_Nindex]
+            test_index = np.delete(NList,random_Nindex)  #获取剩下的标签
+            X_test = X[test_index]
+            Y_test = Y[test_index]
+            tree = self.model()
+            tree.buildTree(X_train,Y_train,atts,chooseIndex =random_Dindex)
+            #tree.afterCut(X_test,Y_test)
+            predict = tree.predict(X).reshape(N,1)
+            if out is None:
+                out = predict
+            else:
+                out = np.hstack((out,predict))
+        o = np.zeros(N).reshape(N,)
+        index = np.sum(out == 1,axis = 1) > np.sum(out == 0,axis = 1)
+        o[index] = 1
+        out = o
+        acc = np.sum(out == Y)/Y.shape[0]
+        return out,acc
 
