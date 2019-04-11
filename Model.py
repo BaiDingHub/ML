@@ -400,6 +400,7 @@ class RandomForest(object):
         self.T = T
         self.trainFreq = trainFreq
         self.attFreq = attFreq
+        self.modelBag = []
     
     def train(self,X,Y,atts):
         '''
@@ -427,7 +428,14 @@ class RandomForest(object):
             Y_test = Y[test_index]
             tree = self.model()
             tree.buildTree(X_train,Y_train,atts,chooseIndex =random_Dindex)
-            #tree.afterCut(X_test,Y_test)
+            tree.afterCut(X_test,Y_test)
+            self.modelBag.append(tree)
+            
+            
+    def predict(self,X,Y = None):
+        N,D = X.shape
+        out = None
+        for tree in self.modelBag:
             predict = tree.predict(X).reshape(N,1)
             if out is None:
                 out = predict
@@ -437,6 +445,8 @@ class RandomForest(object):
         index = np.sum(out == 1,axis = 1) > np.sum(out == 0,axis = 1)
         o[index] = 1
         out = o
+        if Y is None:
+            return out
         acc = np.sum(out == Y)/Y.shape[0]
         return out,acc
 
